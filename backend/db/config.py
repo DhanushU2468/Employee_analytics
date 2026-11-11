@@ -61,6 +61,16 @@ def _resolve_ssl_ca(raw_path: Optional[str]) -> Optional[str]:
 
 def load_mysql_settings(secrets: Optional[Mapping] = None) -> dict:
     """Load MySQL-compatible connection settings from Streamlit secrets or environment."""
+    if not secrets:
+        secrets_path = os.path.join(_PROJECT_ROOT, ".streamlit", "secrets.toml")
+        if os.path.exists(secrets_path):
+            try:
+                import tomllib
+                with open(secrets_path, "rb") as f:
+                    data = tomllib.load(f)
+                    secrets = data.get("mysql", {})
+            except Exception:
+                pass
     secrets = secrets or {}
 
     def setting(secret_key, env_key, default=None):

@@ -70,18 +70,25 @@ def has_data(val):
         return bool(val)
 
 
+def ensure_records(data):
+    """Ensure data is a list of dicts, converting DataFrame or None safely."""
+    if data is None:
+        return []
+    if hasattr(data, "to_dict"):
+        return data.to_dict(orient="records")
+    if isinstance(data, list):
+        return data
+    return list(data)
+
+
 def render_html_table(rows, columns=None):
     """Render a clean, responsive HTML table without requiring pyarrow/pandas."""
-    if rows is None:
-        st.info("No records found.")
-        return
-    if hasattr(rows, "to_dict"):
-        rows = rows.to_dict(orient="records")
-    if not len(rows):
+    records = ensure_records(rows)
+    if not records:
         st.info("No records found.")
         return
     if not columns:
-        columns = list(rows[0].keys())
+        columns = list(records[0].keys())
 
     html = ['<div style="overflow-x:auto; margin-bottom: 1.2rem;"><table style="width:100%; border-collapse: collapse; font-size: 0.88rem; text-align: left; font-family: sans-serif;">']
     html.append('<thead><tr style="background-color: #F1F5F9; border-bottom: 2px solid #CBD5E1;">')
@@ -89,7 +96,7 @@ def render_html_table(rows, columns=None):
         html.append(f'<th style="padding: 10px 12px; font-weight: 600; color: #1E293B;">{col}</th>')
     html.append('</tr></thead><tbody>')
 
-    for i, row in enumerate(rows):
+    for i, row in enumerate(records):
         bg = "#FFFFFF" if i % 2 == 0 else "#F8FAFC"
         html.append(f'<tr style="background-color: {bg}; border-bottom: 1px solid #E2E8F0;">')
         for col in columns:
@@ -243,7 +250,7 @@ if selected_page == "HR Data Entry":
 
             # Instant SCD Type 2 Audit Trail
             st.markdown("##### SCD Type 2 Historical Audit Trail for this Employee")
-            journey = analytics_mgr.get_employee_career_journey(emp_search_id)
+            journey = ensure_records(analytics_mgr.get_employee_career_journey(emp_search_id))
             if has_data(journey):
                 render_html_table(journey, ["EmployeeSK", "FullName", "DepartmentName", "RoleName", "MonthlyIncome", "EffectiveStartDate", "EffectiveEndDate", "RoleStatus", "DaysInRole"])
         else:
@@ -400,7 +407,7 @@ elif selected_page == "Employee Directory":
 
             with col_prof2:
                 st.markdown("##### SCD Type 2 Historical Career Journey (Data Warehouse)")
-                career_history = analytics_mgr.get_employee_career_journey(inspect_id)
+                career_history = ensure_records(analytics_mgr.get_employee_career_journey(inspect_id))
                 if has_data(career_history):
                     render_html_table(career_history, ["EmployeeSK", "DepartmentName", "RoleName", "MonthlyIncome", "EffectiveStartDate", "EffectiveEndDate", "RoleStatus", "DaysInRole"])
                 else:
@@ -434,7 +441,7 @@ elif selected_page == "Executive Dashboard":
     # 1. Year-over-Year Performance Trends
     # --------------------------------------------------------------------------
     st.markdown("#### 1. Year-over-Year (YoY) Performance Trends")
-    yoy_data = analytics_mgr.get_yoy_performance_trends()
+    yoy_data = ensure_records(analytics_mgr.get_yoy_performance_trends())
     if has_data(yoy_data):
         dept_names = sorted(list(set(r["DepartmentName"] for r in yoy_data)))
         fig_yoy = go.Figure()
@@ -463,7 +470,7 @@ elif selected_page == "Executive Dashboard":
     # --------------------------------------------------------------------------
     st.markdown("#### 2. Top Performing Employees by Department")
     st.caption("Displaying strictly the top 3 performing employees per department ranked by SQL Window Functions.")
-    top_performers = analytics_mgr.get_top_performers_by_department(limit_per_dept=3)
+    top_performers = ensure_records(analytics_mgr.get_top_performers_by_department(limit_per_dept=3))
     if has_data(top_performers):
         render_html_table(
             top_performers,
@@ -493,7 +500,7 @@ elif selected_page == "Executive Dashboard":
     with col_r5:
         st.metric("High Risk Percentage", f"{risk_kpis.get('high_risk_percentage', 0)}%")
 
-    dept_risk = analytics_mgr.get_department_attrition_risk()
+    dept_risk = ensure_records(analytics_mgr.get_department_attrition_risk())
     if has_data(dept_risk):
         col_risk_chart, col_risk_summary = st.columns([3, 2])
         with col_risk_chart:
@@ -533,7 +540,7 @@ elif selected_page == "Executive Dashboard":
             )
 
     st.markdown("##### Employees at Critical Flight Risk (Lowest Satisfaction & Work-Life Balance)")
-    high_risk_emps = analytics_mgr.get_high_risk_employees(limit=10)
+    high_risk_emps = ensure_records(analytics_mgr.get_high_risk_employees(limit=10))
     if has_data(high_risk_emps):
         render_html_table(
             high_risk_emps,
@@ -550,7 +557,7 @@ elif selected_page == "Executive Dashboard":
 
     # Talent Bottlenecks: Overallocated Staff
     st.markdown("##### Resource Overallocation Bottlenecks (Talent Strained > 100%)")
-    overallocated_staff = proj_mgr.get_overallocated_employees(limit=10)
+    overallocated_staff = ensure_records(proj_mgr.get_overallocated_employees(limit=10))
     if has_data(overallocated_staff):
         render_html_table(
             overallocated_staff,
@@ -561,7 +568,7 @@ elif selected_page == "Executive Dashboard":
 
     # Project Portfolio Bottlenecks
     st.markdown("##### Project Portfolio Capacity & Workload Pressure")
-    project_bottlenecks = analytics_mgr.get_project_bottlenecks(status="Active")
+    project_bottlenecks = ensure_records(analytics_mgr.get_project_bottlenecks(status="Active"))
     if has_data(project_bottlenecks):
         top_projects = project_bottlenecks[:12]
         fig_proj_bot = go.Figure()
