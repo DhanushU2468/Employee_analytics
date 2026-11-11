@@ -187,13 +187,22 @@ class AnalyticsManager(BaseManager):
                 f.EnvironmentSatisfaction
             FROM Fact_PerformanceReviews f
             JOIN Dim_Employee e ON f.EmployeeKey = e.EmployeeKey
-            WHERE e.IsCurrent = TRUE
+            WHERE e.IsCurrent = 1
               AND f.JobSatisfaction = 1
               AND f.WorkLifeBalance = 1
             ORDER BY e.MonthlyIncome ASC
             LIMIT %s;
         """
-        rows = self.execute_query(query, (limit,), db_key="olap", fetch="all")
+        try:
+            rows = self.execute_query(query, (limit,), db_key="olap", fetch="all")
+        except Exception as ex:
+            err_str = str(ex).lower()
+            if "unknown column" in err_str and ("employeesk" in err_str or "employeekey" in err_str):
+                # Fallback in case schema uses EmployeeSK instead of EmployeeKey
+                alt_query = query.replace("f.EmployeeKey = e.EmployeeKey", "f.EmployeeSK = e.EmployeeSK")
+                rows = self.execute_query(alt_query, (limit,), db_key="olap", fetch="all")
+            else:
+                raise
         return _wrap_dataframe(rows)
 
     def get_employee_career_journey(self, employee_id: int) -> List[Dict[str, Any]]:

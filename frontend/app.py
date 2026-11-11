@@ -1,5 +1,6 @@
 import os
 import sys
+import importlib
 from datetime import date
 from decimal import Decimal
 import plotly.graph_objects as go
@@ -9,6 +10,14 @@ import streamlit as st
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if REPO_ROOT not in sys.path:
     sys.path.insert(0, REPO_ROOT)
+
+# Force reload backend modules if already cached in long-running processes (e.g. Streamlit Cloud)
+for mod_name in list(sys.modules.keys()):
+    if mod_name.startswith("backend."):
+        try:
+            importlib.reload(sys.modules[mod_name])
+        except Exception:
+            pass
 
 from backend.db.db_manager import DatabaseConnection
 from backend.dal.employee_manager import EmployeeManager
@@ -107,6 +116,14 @@ def render_html_table(rows, columns=None):
 
     html.append('</tbody></table></div>')
     st.markdown("".join(html), unsafe_allow_html=True)
+
+
+def render_plotly_chart(fig):
+    """Render Plotly figure cleanly avoiding Streamlit deprecation warnings."""
+    try:
+        st.plotly_chart(fig, width="stretch")
+    except TypeError:
+        st.plotly_chart(fig, use_container_width=True)
 
 
 # ------------------------------------------------------------------------------
@@ -461,7 +478,7 @@ elif selected_page == "Executive Dashboard":
             hovermode="x unified",
             margin=dict(l=40, r=40, t=50, b=40)
         )
-        st.plotly_chart(fig_yoy, use_container_width=True)
+        render_plotly_chart(fig_yoy)
 
     st.markdown("---")
 
@@ -530,7 +547,7 @@ elif selected_page == "Executive Dashboard":
                 yaxis_title="Employee Count",
                 legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
             )
-            st.plotly_chart(fig_risk, use_container_width=True)
+            render_plotly_chart(fig_risk)
 
         with col_risk_summary:
             st.markdown("##### Department Risk Summary")
@@ -600,7 +617,7 @@ elif selected_page == "Executive Dashboard":
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
             margin=dict(l=40, r=40, t=50, b=100)
         )
-        st.plotly_chart(fig_proj_bot, use_container_width=True)
+        render_plotly_chart(fig_proj_bot)
 
         st.markdown("##### Active Projects Bottleneck Status Table")
         render_html_table(
