@@ -20,7 +20,7 @@ class ProjectManager(BaseManager):
 
         # 2. Reflect into OLAP
         query_olap = """
-            INSERT INTO Dim_Project (ProjectID_BK, ProjectName, Budget, Status)
+            INSERT INTO Dim_Project (ProjectID, ProjectName, Budget, Status)
             VALUES (%s, %s, %s, %s);
         """
         self.execute_query(query_olap, (project_id, project_name, budget, status), db_key="olap", fetch="none")

@@ -180,7 +180,7 @@ class AnalyticsManager(BaseManager):
         """Fetch employees exhibiting severe burnout and attrition risk factors."""
         query = """
             SELECT 
-                e.EmployeeID_BK AS EmployeeID,
+                e.EmployeeID AS EmployeeID,
                 CONCAT(e.FirstName, ' ', e.LastName) AS FullName,
                 e.DepartmentName,
                 e.RoleName,
@@ -191,7 +191,7 @@ class AnalyticsManager(BaseManager):
                 f.WorkLifeBalance,
                 f.EnvironmentSatisfaction
             FROM Fact_PerformanceReviews f
-            JOIN Dim_Employee e ON f.EmployeeSK = e.EmployeeSK
+            JOIN Dim_Employee e ON f.EmployeeKey = e.EmployeeKey
             WHERE e.IsCurrent = TRUE
               AND f.JobSatisfaction = 1
               AND f.WorkLifeBalance = 1
@@ -256,32 +256,32 @@ class AnalyticsManager(BaseManager):
 
         # 2. Look up Dimension Keys in OLAP
         lookup_emp = self.execute_query(
-            "SELECT EmployeeSK, MonthlyIncome FROM Dim_Employee WHERE EmployeeID_BK = %s AND IsCurrent = TRUE;",
+            "SELECT EmployeeKey, MonthlyIncome FROM Dim_Employee WHERE EmployeeID = %s AND IsCurrent = TRUE;",
             (employee_id,),
             db_key="olap",
             fetch="one"
         )
-        emp_sk = lookup_emp["EmployeeSK"] if lookup_emp else None
+        emp_sk = lookup_emp["EmployeeKey"] if lookup_emp else None
         salary = lookup_emp["MonthlyIncome"] if lookup_emp else 0.0
 
         lookup_dept = self.execute_query(
             """
-            SELECT dd.DepartmentSK 
+            SELECT dd.DepartmentKey 
             FROM employees e
-            JOIN Dim_Department dd ON e.DepartmentID = dd.DepartmentID_BK
+            JOIN Dim_Department dd ON e.DepartmentID = dd.DepartmentID
             WHERE e.EmployeeID = %s;
             """,
             (employee_id,),
             db_key="olap",
             fetch="one"
         )
-        dept_sk = lookup_dept["DepartmentSK"] if lookup_dept else 1
+        dept_sk = lookup_dept["DepartmentKey"] if lookup_dept else 1
 
         lookup_proj = self.execute_query(
             """
-            SELECT dp.ProjectSK, ep.AllocationPercentage
+            SELECT dp.ProjectKey, ep.AllocationPercentage
             FROM employeeprojects ep
-            JOIN Dim_Project dp ON ep.ProjectID = dp.ProjectID_BK
+            JOIN Dim_Project dp ON ep.ProjectID = dp.ProjectID
             WHERE ep.EmployeeID = %s
             LIMIT 1;
             """,
@@ -289,7 +289,7 @@ class AnalyticsManager(BaseManager):
             db_key="olap",
             fetch="one"
         )
-        proj_sk = lookup_proj["ProjectSK"] if lookup_proj else None
+        proj_sk = lookup_proj["ProjectKey"] if lookup_proj else None
         allocation = lookup_proj["AllocationPercentage"] if lookup_proj else 0
 
         date_key = review_date.year * 10000 + review_date.month * 100 + review_date.day
@@ -298,7 +298,7 @@ class AnalyticsManager(BaseManager):
         if emp_sk:
             query_fact = """
                 INSERT INTO Fact_PerformanceReviews (
-                    ReviewID_BK, EmployeeSK, DepartmentSK, ProjectSK, DateKey,
+                    ReviewID, EmployeeKey, DepartmentKey, ProjectKey, DateKey,
                     PerformanceRating, JobSatisfaction, EnvironmentSatisfaction,
                     WorkLifeBalance, RelationshipSatisfaction,
                     MonthlyIncomeSnapshot, AllocationPercentageSnapshot

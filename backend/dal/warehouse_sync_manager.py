@@ -8,7 +8,7 @@ class WarehouseSyncManager(BaseManager):
         with self.db.get_cursor(db_key="olap", dictionary=False) as cursor:
             cursor.execute(
                 """
-                INSERT IGNORE INTO Dim_Department (DepartmentID_BK, DepartmentName)
+                INSERT IGNORE INTO Dim_Department (DepartmentID, DepartmentName)
                 SELECT DepartmentID, DepartmentName FROM departments;
                 """
             )
@@ -16,7 +16,7 @@ class WarehouseSyncManager(BaseManager):
 
             cursor.execute(
                 """
-                INSERT IGNORE INTO Dim_Project (ProjectID_BK, ProjectName, Budget, Status)
+                INSERT IGNORE INTO Dim_Project (ProjectID, ProjectName, Budget, Status)
                 SELECT ProjectID, ProjectName, Budget, Status FROM projects;
                 """
             )
@@ -25,22 +25,22 @@ class WarehouseSyncManager(BaseManager):
             cursor.execute(
                 """
                 INSERT INTO Dim_Employee (
-                    EmployeeID_BK, FirstName, LastName, Email, Age, Gender,
+                    EmployeeID, FirstName, LastName, Email, Age, Gender,
                     EducationField, DistanceFromHome, MonthlyIncome,
                     DepartmentName, RoleName, JobLevel,
-                    EffectiveStartDate, EffectiveEndDate, IsCurrent
+                    HireDate, StartDate, EndDate, IsCurrent
                 )
                 SELECT
                     e.EmployeeID, e.FirstName, e.LastName, e.Email, e.Age, e.Gender,
                     e.EducationField, e.DistanceFromHome, e.MonthlyIncome,
                     d.DepartmentName, r.RoleName, r.JobLevel,
-                    e.HireDate, '9999-12-31', TRUE
+                    e.HireDate, e.HireDate, '9999-12-31', 1
                 FROM employees e
                 JOIN departments d ON e.DepartmentID = d.DepartmentID
                 JOIN jobroles r ON e.JobRoleID = r.JobRoleID
                 WHERE NOT EXISTS (
                     SELECT 1 FROM Dim_Employee de
-                    WHERE de.EmployeeID_BK = e.EmployeeID
+                    WHERE de.EmployeeID = e.EmployeeID
                 );
                 """
             )
@@ -49,8 +49,8 @@ class WarehouseSyncManager(BaseManager):
             cursor.execute(
                 """
                 INSERT IGNORE INTO Dim_Date (
-                    DateKey, FullDate, Year, Quarter, Month, MonthName, Day,
-                    DayOfWeek, IsWeekend
+                    DateKey, FullDate, YearNumber, QuarterNumber, MonthNumber, MonthName, DayNumber,
+                    DayName, IsWeekend
                 )
                 SELECT DISTINCT
                     YEAR(ReviewDate) * 10000 + MONTH(ReviewDate) * 100 + DAY(ReviewDate),
@@ -66,13 +66,13 @@ class WarehouseSyncManager(BaseManager):
             cursor.execute(
                 """
                 INSERT INTO Fact_PerformanceReviews (
-                    ReviewID_BK, EmployeeSK, DepartmentSK, ProjectSK, DateKey,
+                    ReviewID, EmployeeKey, DepartmentKey, ProjectKey, DateKey,
                     PerformanceRating, JobSatisfaction, EnvironmentSatisfaction,
                     WorkLifeBalance, RelationshipSatisfaction,
                     MonthlyIncomeSnapshot, AllocationPercentageSnapshot
                 )
                 SELECT
-                    pr.ReviewID, de.EmployeeSK, dd.DepartmentSK, dp.ProjectSK,
+                    pr.ReviewID, de.EmployeeKey, dd.DepartmentKey, dp.ProjectKey,
                     YEAR(pr.ReviewDate) * 10000 + MONTH(pr.ReviewDate) * 100
                         + DAY(pr.ReviewDate),
                     pr.PerformanceRating, pr.JobSatisfaction,
@@ -81,19 +81,19 @@ class WarehouseSyncManager(BaseManager):
                     COALESCE(ep.AllocationPercentage, 0)
                 FROM performancereviews pr
                 JOIN Dim_Employee de
-                    ON pr.EmployeeID = de.EmployeeID_BK AND de.IsCurrent = TRUE
+                    ON pr.EmployeeID = de.EmployeeID AND de.IsCurrent = 1
                 JOIN employees e ON pr.EmployeeID = e.EmployeeID
-                JOIN Dim_Department dd ON e.DepartmentID = dd.DepartmentID_BK
+                JOIN Dim_Department dd ON e.DepartmentID = dd.DepartmentID
                 LEFT JOIN (
                     SELECT EmployeeID, MIN(ProjectID) AS ProjectID,
                            MAX(AllocationPercentage) AS AllocationPercentage
                     FROM employeeprojects
                     GROUP BY EmployeeID
                 ) ep ON pr.EmployeeID = ep.EmployeeID
-                LEFT JOIN Dim_Project dp ON ep.ProjectID = dp.ProjectID_BK
+                LEFT JOIN Dim_Project dp ON ep.ProjectID = dp.ProjectID
                 WHERE NOT EXISTS (
                     SELECT 1 FROM Fact_PerformanceReviews f
-                    WHERE f.ReviewID_BK = pr.ReviewID
+                    WHERE f.ReviewID = pr.ReviewID
                 );
                 """
             )

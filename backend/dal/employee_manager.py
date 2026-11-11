@@ -52,16 +52,17 @@ class EmployeeManager(BaseManager):
         # Step 3: Insert into OLAP Dim_Employee as Current Active Record
         query_olap = """
             INSERT INTO Dim_Employee (
-                EmployeeID_BK, FirstName, LastName, Email, Age, Gender,
+                EmployeeID, FirstName, LastName, Email, Age, Gender,
                 EducationField, DistanceFromHome, MonthlyIncome,
                 DepartmentName, RoleName, JobLevel,
-                EffectiveStartDate, EffectiveEndDate, IsCurrent
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, '9999-12-31', TRUE);
+                HireDate, StartDate, EndDate, IsCurrent
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, '9999-12-31', 1);
         """
         params_olap = (
             emp.employee_id, emp.first_name, emp.last_name, emp.email,
             emp.age, emp.gender, emp.education_field, emp.distance_from_home,
-            emp.monthly_income, dept_name, role_name, job_level, emp.hire_date
+            emp.monthly_income, dept_name, role_name, job_level,
+            emp.hire_date, emp.hire_date
         )
         self.execute_query(query_olap, params_olap, db_key="olap", fetch="none")
 
@@ -108,10 +109,10 @@ class EmployeeManager(BaseManager):
             cursor.execute(
                 """
                 SELECT FirstName, LastName, Email, Age, Gender, EducationField,
-                       DistanceFromHome
+                       DistanceFromHome, HireDate
                 FROM Dim_Employee
-                WHERE EmployeeID_BK = %s AND IsCurrent = TRUE
-                ORDER BY EmployeeSK DESC
+                WHERE EmployeeID = %s AND IsCurrent = 1
+                ORDER BY EmployeeKey DESC
                 LIMIT 1;
                 """,
                 (employee_id,),
@@ -125,21 +126,21 @@ class EmployeeManager(BaseManager):
             cursor.execute(
                 """
                 UPDATE Dim_Employee
-                SET EffectiveEndDate = CURRENT_DATE(), IsCurrent = FALSE
-                WHERE EmployeeID_BK = %s AND IsCurrent = TRUE;
+                SET EndDate = CURRENT_DATE(), IsCurrent = 0
+                WHERE EmployeeID = %s AND IsCurrent = 1;
                 """,
                 (employee_id,),
             )
             cursor.execute(
                 """
                 INSERT INTO Dim_Employee (
-                    EmployeeID_BK, FirstName, LastName, Email, Age, Gender,
+                    EmployeeID, FirstName, LastName, Email, Age, Gender,
                     EducationField, DistanceFromHome, MonthlyIncome,
                     DepartmentName, RoleName, JobLevel,
-                    EffectiveStartDate, EffectiveEndDate, IsCurrent
+                    HireDate, StartDate, EndDate, IsCurrent
                 ) VALUES (
-                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                    CURRENT_DATE(), '9999-12-31', TRUE
+                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                    %s, CURRENT_DATE(), '9999-12-31', 1
                 );
                 """,
                 (
@@ -147,7 +148,7 @@ class EmployeeManager(BaseManager):
                     current["Email"], current["Age"], current["Gender"],
                     current["EducationField"], current["DistanceFromHome"],
                     new_salary, new_role["DepartmentName"], new_role["RoleName"],
-                    new_role["JobLevel"],
+                    new_role["JobLevel"], current.get("HireDate") or date.today()
                 ),
             )
 
