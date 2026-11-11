@@ -58,9 +58,26 @@ def format_table_value(col, val):
     return str(val)
 
 
+def has_data(val):
+    """Safely check if val (list, dict, or DataFrame) contains any records."""
+    if val is None:
+        return False
+    if hasattr(val, "empty"):
+        return not val.empty
+    try:
+        return len(val) > 0
+    except TypeError:
+        return bool(val)
+
+
 def render_html_table(rows, columns=None):
     """Render a clean, responsive HTML table without requiring pyarrow/pandas."""
-    if not rows:
+    if rows is None:
+        st.info("No records found.")
+        return
+    if hasattr(rows, "to_dict"):
+        rows = rows.to_dict(orient="records")
+    if not len(rows):
         st.info("No records found.")
         return
     if not columns:
@@ -227,7 +244,7 @@ if selected_page == "HR Data Entry":
             # Instant SCD Type 2 Audit Trail
             st.markdown("##### SCD Type 2 Historical Audit Trail for this Employee")
             journey = analytics_mgr.get_employee_career_journey(emp_search_id)
-            if journey:
+            if has_data(journey):
                 render_html_table(journey, ["EmployeeSK", "FullName", "DepartmentName", "RoleName", "MonthlyIncome", "EffectiveStartDate", "EffectiveEndDate", "RoleStatus", "DaysInRole"])
         else:
             st.warning(f"Employee with ID {emp_search_id} not found.")
@@ -384,7 +401,7 @@ elif selected_page == "Employee Directory":
             with col_prof2:
                 st.markdown("##### SCD Type 2 Historical Career Journey (Data Warehouse)")
                 career_history = analytics_mgr.get_employee_career_journey(inspect_id)
-                if career_history:
+                if has_data(career_history):
                     render_html_table(career_history, ["EmployeeSK", "DepartmentName", "RoleName", "MonthlyIncome", "EffectiveStartDate", "EffectiveEndDate", "RoleStatus", "DaysInRole"])
                 else:
                     st.caption("No historical records found.")
@@ -418,7 +435,7 @@ elif selected_page == "Executive Dashboard":
     # --------------------------------------------------------------------------
     st.markdown("#### 1. Year-over-Year (YoY) Performance Trends")
     yoy_data = analytics_mgr.get_yoy_performance_trends()
-    if yoy_data:
+    if has_data(yoy_data):
         dept_names = sorted(list(set(r["DepartmentName"] for r in yoy_data)))
         fig_yoy = go.Figure()
         for dept in dept_names:
@@ -447,7 +464,7 @@ elif selected_page == "Executive Dashboard":
     st.markdown("#### 2. Top Performing Employees by Department")
     st.caption("Displaying strictly the top 3 performing employees per department ranked by SQL Window Functions.")
     top_performers = analytics_mgr.get_top_performers_by_department(limit_per_dept=3)
-    if top_performers:
+    if has_data(top_performers):
         render_html_table(
             top_performers,
             ["DepartmentRank", "FullName", "DepartmentName", "RoleName", "JobLevel", "MonthlyIncome", "AvgPerformanceRating", "AvgJobSatisfaction"]
@@ -477,7 +494,7 @@ elif selected_page == "Executive Dashboard":
         st.metric("High Risk Percentage", f"{risk_kpis.get('high_risk_percentage', 0)}%")
 
     dept_risk = analytics_mgr.get_department_attrition_risk()
-    if dept_risk:
+    if has_data(dept_risk):
         col_risk_chart, col_risk_summary = st.columns([3, 2])
         with col_risk_chart:
             fig_risk = go.Figure()
@@ -517,7 +534,7 @@ elif selected_page == "Executive Dashboard":
 
     st.markdown("##### Employees at Critical Flight Risk (Lowest Satisfaction & Work-Life Balance)")
     high_risk_emps = analytics_mgr.get_high_risk_employees(limit=10)
-    if high_risk_emps:
+    if has_data(high_risk_emps):
         render_html_table(
             high_risk_emps,
             ["EmployeeID", "FullName", "DepartmentName", "RoleName", "MonthlyIncome", "DistanceFromHome", "PerformanceRating", "JobSatisfaction", "WorkLifeBalance", "EnvironmentSatisfaction"]
@@ -534,7 +551,7 @@ elif selected_page == "Executive Dashboard":
     # Talent Bottlenecks: Overallocated Staff
     st.markdown("##### Resource Overallocation Bottlenecks (Talent Strained > 100%)")
     overallocated_staff = proj_mgr.get_overallocated_employees(limit=10)
-    if overallocated_staff:
+    if has_data(overallocated_staff):
         render_html_table(
             overallocated_staff,
             ["EmployeeID", "FullName", "DepartmentName", "ProjectCount", "TotalAllocationPercentage"]
@@ -545,7 +562,7 @@ elif selected_page == "Executive Dashboard":
     # Project Portfolio Bottlenecks
     st.markdown("##### Project Portfolio Capacity & Workload Pressure")
     project_bottlenecks = analytics_mgr.get_project_bottlenecks(status="Active")
-    if project_bottlenecks:
+    if has_data(project_bottlenecks):
         top_projects = project_bottlenecks[:12]
         fig_proj_bot = go.Figure()
         fig_proj_bot.add_trace(go.Bar(

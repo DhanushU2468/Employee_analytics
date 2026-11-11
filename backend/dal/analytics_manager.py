@@ -11,13 +11,8 @@ from backend.models.entities import PerformanceReview
 
 
 def _wrap_dataframe(rows):
-    """Return a pandas DataFrame if pandas is functional, otherwise return list of dicts."""
-    if pd is not None:
-        try:
-            return pd.DataFrame(rows)
-        except Exception:
-            pass
-    return rows
+    """Return rows as a list of dicts directly so it can be cleanly formatted and iterated."""
+    return rows or []
 
 
 class AnalyticsManager(BaseManager):
@@ -42,7 +37,7 @@ class AnalyticsManager(BaseManager):
         row = self.execute_query(query, db_key="olap", fetch="one")
         return row or {}
 
-    def get_top_performers_by_department(self, limit_per_dept: int = 5) -> pd.DataFrame:
+    def get_top_performers_by_department(self, limit_per_dept: int = 5) -> List[Dict[str, Any]]:
         """
         Query top-performing employees ranked via DENSE_RANK() OVER (PARTITION BY DepartmentName...).
         """
@@ -63,7 +58,7 @@ class AnalyticsManager(BaseManager):
         rows = self.execute_query(query, (limit_per_dept,), db_key="olap", fetch="all")
         return _wrap_dataframe(rows)
 
-    def get_yoy_performance_trends(self) -> pd.DataFrame:
+    def get_yoy_performance_trends(self) -> List[Dict[str, Any]]:
         """Fetch YoY performance, satisfaction, and rating delta metrics."""
         query = """
             SELECT 
@@ -82,7 +77,7 @@ class AnalyticsManager(BaseManager):
         rows = self.execute_query(query, db_key="olap", fetch="all")
         return _wrap_dataframe(rows)
 
-    def get_salary_vs_performance_correlation(self) -> pd.DataFrame:
+    def get_salary_vs_performance_correlation(self) -> List[Dict[str, Any]]:
         """Fetch compensation vs performance distribution by department and role."""
         query = """
             SELECT 
@@ -201,7 +196,7 @@ class AnalyticsManager(BaseManager):
         rows = self.execute_query(query, (limit,), db_key="olap", fetch="all")
         return _wrap_dataframe(rows)
 
-    def get_employee_career_journey(self, employee_id: int) -> pd.DataFrame:
+    def get_employee_career_journey(self, employee_id: int) -> List[Dict[str, Any]]:
         """
         Retrieve the full SCD Type 2 career journey (promotions, department changes, raises)
         for a specific employee.
