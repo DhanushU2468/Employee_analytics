@@ -1,3 +1,35 @@
+import os
+import sys
+import importlib
+from datetime import date
+from decimal import Decimal
+import plotly.graph_objects as go
+import streamlit as st
+
+# Ensure project root is on PYTHONPATH
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if REPO_ROOT not in sys.path:
+    sys.path.insert(0, REPO_ROOT)
+
+# Force reload backend modules if already cached in long-running processes (e.g. Streamlit Cloud)
+for mod_name in list(sys.modules.keys()):
+    if mod_name.startswith("backend."):
+        try:
+            importlib.reload(sys.modules[mod_name])
+        except Exception:
+            pass
+
+from backend.db.db_manager import DatabaseConnection
+from backend.dal.employee_manager import EmployeeManager
+from backend.dal.project_manager import ProjectManager
+from backend.dal.analytics_manager import AnalyticsManager
+from backend.dal.warehouse_sync_manager import WarehouseSyncManager
+from backend.models.entities import Employee
+
+# Page Configuration (No emojis)
+st.set_page_config(
+    page_title="Enterprise HR Analytics Portal",
+    layout="wide",
     initial_sidebar_state="expanded"
 )
 
@@ -20,14 +52,7 @@ if "logged_in" not in st.session_state:
 
 if not st.session_state.logged_in:
     st.markdown(
-        """
-        <div style="max-width:650px; margin:5rem auto 1rem auto; text-align:center;">
-            <div style="font-size:2rem; font-weight:700;">Enterprise HR Analytics</div>
-            <div style="color:gray; margin-top:0.4rem;">
-                Employee Management &amp; Analytics Portal
-            </div>
-        </div>
-        """,
+        """ <div style="max-width:650px; margin:5rem auto 1rem auto; text-align:center;"> <div style="font-size:2rem; font-weight:700;">Enterprise HR Analytics</div> <div style="color:gray; margin-top:0.4rem;"> Employee Management &amp; Analytics Portal </div> </div> """,
         unsafe_allow_html=True,
     )
 
@@ -86,6 +111,7 @@ def format_table_value(col, val):
         return f"{float(val):.2f}"
     return str(val)
 
+
 def has_data(val):
     """Safely check if val (list, dict, or DataFrame) contains any records."""
     if val is None:
@@ -143,6 +169,8 @@ def render_plotly_chart(fig):
         st.plotly_chart(fig, width="stretch")
     except TypeError:
         st.plotly_chart(fig, use_container_width=True)
+
+
 # ------------------------------------------------------------------------------
 # SIDEBAR NAVIGATION (Replaces top tabs; connection status removed)
 # ------------------------------------------------------------------------------
@@ -183,6 +211,10 @@ departments = emp_mgr.get_all_departments()
 job_roles = emp_mgr.get_all_job_roles()
 dept_options = {d.department_name: d.department_id for d in departments}
 role_options = {f"{r.role_name} (Level {r.job_level})": r.job_role_id for r in job_roles}
+
+# ==============================================================================
+# MODULE 1: HR DATA ENTRY (OLTP INTERACTION)
+# ==============================================================================
 if selected_page == "HR Data Entry":
     st.markdown("### Workforce Operations and Data Entry")
     st.info("Decoupled Architecture: Forms securely write to the OLTP database via the Python DAL. Career changes automatically trigger SCD Type 2 versioning in the OLAP Data Warehouse.")
@@ -241,7 +273,8 @@ if selected_page == "HR Data Entry":
                         st.success(f"Employee {fn} {ln} onboarded with EmployeeID: {assigned_id}. Synchronized into OLAP Dim_Employee as Active Record.")
                     except Exception as e:
                         st.error(f"Onboarding failed: {e}")
- # 2. Update Employee Department / Role (SCD Type 2 Trigger)
+
+    # 2. Update Employee Department / Role (SCD Type 2 Trigger)
     with entry_sub2:
         st.markdown("#### Update Employee Department, Role or Salary (SCD Type 2)")
         st.caption("Updating an employee department or salary triggers an SCD Type 2 update in the Data Warehouse (retires old row with EffectiveEndDate = TODAY, opens new row with EffectiveStartDate = TODAY).")
@@ -288,7 +321,8 @@ if selected_page == "HR Data Entry":
                 render_html_table(journey, ["EmployeeSK", "FullName", "DepartmentName", "RoleName", "MonthlyIncome", "EffectiveStartDate", "EffectiveEndDate", "RoleStatus", "DaysInRole"])
         else:
             st.warning(f"Employee with ID {emp_search_id} not found.")
-# 3. Create Project & Assign Staff
+
+    # 3. Create Project & Assign Staff
     with entry_sub3:
         st.markdown("#### Projects and Resource Allocation")
         col_proj1, col_proj2 = st.columns(2)
@@ -332,7 +366,8 @@ if selected_page == "HR Data Entry":
                         st.success(f"Assigned Employee #{alloc_emp_id} to project at {alloc_pct}% allocation.")
                     except Exception as e:
                         st.error(f"Allocation failed: {e}")
-         # 4. Submit Performance Review
+
+    # 4. Submit Performance Review
     with entry_sub4:
         st.markdown("#### Submit Performance Review")
         st.caption("Writes to OLTP performancereviews and synchronizes to OLAP Fact_PerformanceReviews.")
@@ -365,6 +400,13 @@ if selected_page == "HR Data Entry":
                     st.success(f"Performance Review #{rev_id} recorded in OLTP and synchronized into Data Warehouse Fact table.")
                 except Exception as e:
                     st.error(f"Review submission failed: {e}")
+
+# ==============================================================================
+# MODULE 2: ACTIVE EMPLOYEE DIRECTORY (OLTP OPERATIONAL READ)
+# ==============================================================================
+elif selected_page == "Employee Directory":
+    st.markdown("### Active Employee Directory (OLTP Live Stream)")
+    st.caption("Live data stream fetching active employees from the operational employees table via Python DAL.")
 
     col_s1, col_s2, col_s3 = st.columns([2, 1, 1])
     with col_s1:
@@ -438,7 +480,30 @@ if selected_page == "HR Data Entry":
                     st.caption("No historical records found.")
     else:
         st.warning("No employees match the selected criteria.")
-          # --------------------------------------------------------------------------
+
+# ==============================================================================
+# MODULE 3: EXECUTIVE DASHBOARD (OLAP INTERACTION)
+# ==============================================================================
+elif selected_page == "Executive Dashboard":
+    st.markdown("### Executive Analytics Dashboard")
+    st.caption("Fetches analytical metrics from the Star Schema using database-level aggregations and Window Functions.")
+
+    kpis = analytics_mgr.get_executive_kpis()
+    col_m1, col_m2, col_m3, col_m4, col_m5 = st.columns(5)
+    with col_m1:
+        st.metric("Active Headcount", f"{kpis.get('active_headcount', 0):,}")
+    with col_m2:
+        st.metric("SCD Type 2 Historical Snapshots", f"{kpis.get('historical_versions', 0):,}")
+    with col_m3:
+        st.metric("Avg Performance Rating", f"{kpis.get('avg_performance', 0)} / 5.0")
+    with col_m4:
+        st.metric("Avg Work-Life Balance", f"{kpis.get('avg_work_life_balance', 0)} / 4.0")
+    with col_m5:
+        st.metric("Total Project Budget", f"${kpis.get('total_project_budget', 0):,.0f}")
+
+    st.markdown("---")
+
+    # --------------------------------------------------------------------------
     # 1. Year-over-Year Performance Trends
     # --------------------------------------------------------------------------
     st.markdown("#### 1. Year-over-Year (YoY) Performance Trends")
@@ -500,7 +565,8 @@ if selected_page == "HR Data Entry":
         st.metric("Low Risk (Stable)", f"{risk_kpis.get('low_risk_count', 0):,}")
     with col_r5:
         st.metric("High Risk Percentage", f"{risk_kpis.get('high_risk_percentage', 0)}%")
- dept_risk = ensure_records(analytics_mgr.get_department_attrition_risk())
+
+    dept_risk = ensure_records(analytics_mgr.get_department_attrition_risk())
     if has_data(dept_risk):
         col_risk_chart, col_risk_summary = st.columns([3, 2])
         with col_risk_chart:
@@ -548,7 +614,8 @@ if selected_page == "HR Data Entry":
         )
 
     st.markdown("---")
-# --------------------------------------------------------------------------
+
+    # --------------------------------------------------------------------------
     # 4. Project Bottleneck & Resource Allocation Analysis (NEW FEATURE)
     # --------------------------------------------------------------------------
     st.markdown("#### 4. Project Bottleneck & Resource Allocation Analysis")
@@ -606,5 +673,3 @@ if selected_page == "HR Data Entry":
             top_projects,
             ["ProjectName", "Budget", "LoggedReviews", "AvgAllocationPercentage", "AvgTeamWorkLifeBalance", "BottleneckRisk"]
         )
-      
-                
